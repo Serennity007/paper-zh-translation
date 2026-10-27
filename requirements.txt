@@ -1,0 +1,4 @@
+# PyMuPDF >= 1.24 提供 `import pymupdf`（旧名 fitz）
+PyMuPDF>=1.24
+# 只在从 Noto Serif SC 可变字体实例化 400/700 静态字重时需要
+fonttools>=4.44

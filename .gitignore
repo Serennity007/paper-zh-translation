@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 实例化出来的中文字体（首次运行自动重建，不入库）
+.fonts/
+paper-zh-fonts/
+
+# 翻译工程产物：属于某一篇论文，不进仓库
+work/
+翻译工程/
+blocks.json
+segments.json
+seg*.txt
+zh_page*.json
+*_中文翻译.pdf
+
+# 质检与预览临时件
+*.png
+preview/
+_build/
+
+.DS_Store
+*.log
