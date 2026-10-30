@@ -50,7 +50,7 @@ def make_pdf(path):
 
 
 def run(script, *args):
-    proc = subprocess.run([sys.executable, os.path.join(SCRIPTS, script), *args],
+    proc = subprocess.run([sys.executable, '-X', 'utf8', os.path.join(SCRIPTS, script), *args],
                           capture_output=True, text=True, encoding="utf-8", errors="replace")
     print("--- %s (exit %d)" % (script, proc.returncode))
     for line in (proc.stdout or "").splitlines():
@@ -84,7 +84,8 @@ def main():
 
         run("build_pdf.py", "--src", src, "--work", work, "--out", out,
             "--fonts", os.path.join(work, ".fonts"))
-        qa = run("qa_check.py", out, "--work", work, "--src", src)
+        qa = run("qa_check.py", out, "--work", work, "--src", src,
+                 "--fonts", os.path.join(work, ".fonts"))
 
         import pymupdf
         src_doc, out_doc = pymupdf.open(src), pymupdf.open(out)

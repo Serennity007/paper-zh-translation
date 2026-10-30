@@ -72,15 +72,17 @@ python scripts/build_pdf.py --src <paper.pdf> --work <workdir>
 python scripts/build_pdf.py --src <paper.pdf> --work <workdir> --pages 3,4
 ```
 
+构建前会核对段落 ID、逐页 JSON、重复键和 `merge`，输入错误返回退出码 2 并保留已有输出。先修正报告中的文件或 ID 再重跑，不要忽略错误。三个入口脚本需要同目录的 `translation_io.py`，归档或复制时保留整个 `scripts/` 目录。
+
 引擎做的事（改脚本前先读 `references/pitfalls.md`）：行级擦除 → 覆盖撞车徽标 → 原框位写中文（字号自适应下探到 6.2pt、行距 1.20~1.60× 自适应并底对齐、逐字两端对齐、避头点、项目符号悬挂缩进）→ 字体子集化 → 写元数据 → 输出 `<同名>_中文翻译.pdf`。
 
 ### Phase 4 · 质检（必做，不许跳）
 
 ```bash
-python scripts/qa_check.py <out.pdf> --work <workdir>
+python scripts/qa_check.py <out.pdf> --work <workdir> --src <paper.pdf>
 ```
 
-脚本查四类：残留英文正文、横向越界（默认容差 5pt，悬挂标点与字形 advance 误差通常 ≤4pt）、纵向越界、缺字形。**脚本只报数字，判断靠人**：
+质检也会先验证输入；自定义字体目录时传入与构建相同的 `--fonts`。脚本查五类：残留英文正文、横向越界（默认容差 5pt，悬挂标点与字形 advance 误差通常 ≤4pt）、纵向越界、缺字形、译文丢字。**脚本只报数字，判断靠人**：
 
 - `english` 命中参考文献页、表格页是正常的（脚本已过滤数字密集行、`[12]` 引用行、含年份的条目）；命中**正文页**就是漏译，回去补 JSON。
 - `glyph` 必须为 0；不为 0 说明译文里有当前字体缺字形的字符，按 `references/pitfalls.md` 第 3 条换字符。

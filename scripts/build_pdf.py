@@ -21,13 +21,12 @@ workdir 中需要：
     8. 数学字母（U+1D400 段）在 CJK 字体里没有字形 → NFKC 归一为 ASCII。
 """
 import argparse
-import glob
-import json
 import os
 import sys
 import unicodedata
 
 import pymupdf
+from translation_io import load_segments, load_zh, validate_page_count
 
 NO_LINE_START = '，。、；：？！）》」』】”’%…·'
 
@@ -258,18 +257,6 @@ def place(page, bb, text, orig_size, bold_all=False, align='left',
 
 
 # ---------------------------------------------------------------- 主流程
-def load_zh(work):
-    zh, meta = {}, {}
-    for f in sorted(glob.glob(os.path.join(work, 'zh_page*.json'))):
-        d = json.load(open(f, encoding='utf-8'))
-        for k, v in d.items():
-            if k.startswith('@'):
-                meta[k[1:]] = v
-            else:
-                zh[k] = v
-    return zh, meta
-
-
 def main():
     global FONT, BOLD
     ap = argparse.ArgumentParser()
@@ -281,18 +268,25 @@ def main():
     ap.add_argument('--no-justify', action='store_true')
     args = ap.parse_args()
 
-    ensure_fonts(os.path.abspath(args.fonts))
-    FONT = pymupdf.Font(fontfile=SERIF)
-    BOLD = pymupdf.Font(fontfile=BOLD_PATH)
-
     out = args.out or os.path.join(
         os.path.dirname(os.path.abspath(args.src)),
         os.path.splitext(os.path.basename(args.src))[0] + '_中文翻译.pdf')
-    zh, meta = load_zh(args.work)
-    segs = json.load(open(os.path.join(args.work, 'segments.json'), encoding='utf-8'))
-    pages = {int(x) for x in args.pages.split(',')} if args.pages else None
+    try:
+        segs = load_segments(args.work)
+        zh, meta = load_zh(args.work, segs)
+        pages = {int(x) for x in args.pages.split(',')} if args.pages is not None else None
+        doc = pymupdf.open(args.src)
+        validate_page_count(segs, doc.page_count)
+        if pages is not None and (not pages or min(pages) < 0 or max(pages) >= doc.page_count):
+            raise ValueError('--pages must contain existing 0-based page numbers.')
+        if pages is not None and not any(s['p'] in pages and s['id'] in zh for s in segs):
+            raise ValueError('No translation entries on the pages selected by --pages.')
+    except (OSError, ValueError) as error:
+        ap.error(str(error))
 
-    doc = pymupdf.open(args.src)
+    ensure_fonts(os.path.abspath(args.fonts))
+    FONT = pymupdf.Font(fontfile=SERIF)
+    BOLD = pymupdf.Font(fontfile=BOLD_PATH)
     for pno in range(doc.page_count):
         if pages and pno not in pages:
             continue

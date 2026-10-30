@@ -2,6 +2,8 @@
 
 **[中文](README.md) | [English](README.en.md)**
 
+[Project navigator](https://github.com/Serennity007/repo-catalog) · [Maintenance changes](CHANGELOG.md)
+
 ![GitHub stars](https://img.shields.io/github/stars/Serennity007/paper-zh-translation?style=flat-square) ![License](https://img.shields.io/github/license/Serennity007/paper-zh-translation?style=flat-square) ![Method](https://img.shields.io/badge/method-in%20place-blue?style=flat-square) ![Language](https://img.shields.io/badge/docs-Chinese%20%7C%20EN-orange?style=flat-square)
 
 An AI skill that turns an English paper PDF into a Chinese one **in place**: paragraphs are extracted by line-level coordinates, translated page by page into JSON, then written back into the original text boxes. Columns, figures, tables, formulas and references keep their positions, so the result still reads like the original page. Ships a six-phase workflow, three standalone scripts, a term table and 13 documented typesetting traps.
@@ -38,13 +40,15 @@ paper-zh-translation/
 ├── scripts/
 │   ├── extract_blocks.py       # Phase 1 structure parsing (line boxes + bullet splitting)
 │   ├── build_pdf.py            # Phase 3 engine (erase + rewrite in place + font subsetting)
-│   └── qa_check.py             # Phase 4 QA (leftover English / overflow / missing glyphs)
+│   ├── qa_check.py             # Phase 4 QA (leftover English / overflow / missing glyphs)
+│   └── translation_io.py       # shared input validation for build and QA
 ├── references/
 │   ├── translation-json.md     # translation JSON format, merge / color / align / skip_first
 │   ├── terminology.md          # term tables (data reduction / model training / DB) + caption style
 │   └── pitfalls.md             # 13 recurring traps: symptom -> cause -> fix
 └── tests/
-    └── smoke_test.py           # synthesises a two-column PDF and runs Phase 1 -> 3 -> 4
+    ├── smoke_test.py           # synthesises a two-column PDF and runs Phase 1 -> 3 -> 4
+    └── test_inputs.py          # invalid IDs, duplicate keys, pages, merges and output preservation
 ```
 
 `SKILL.md` and `references/*.md` are written in Chinese: the rules they encode are about Chinese typesetting (line-start punctuation, term pairing, hanging indents) and the vocabulary of the papers being translated.
@@ -65,7 +69,7 @@ WORK=translation-work           # keep every intermediate here so a one-line fix
 python scripts/extract_blocks.py paper.pdf "$WORK"
 # read "$WORK"/seg00.txt, translate page by page into "$WORK"/zh_page00.json
 python scripts/build_pdf.py --src paper.pdf --work "$WORK"
-python scripts/qa_check.py paper_中文翻译.pdf --work "$WORK"
+python scripts/qa_check.py paper_中文翻译.pdf --work "$WORK" --src paper.pdf
 ```
 
 Flags you will actually use:
@@ -77,6 +81,15 @@ Flags you will actually use:
 | `--fonts` | where the instantiated fonts live |
 | `--no-justify` | turn off per-character justification (reads better in Latin-heavy paragraphs) |
 | `--tol` | horizontal overflow tolerance for `qa_check.py`, default 5pt |
+
+Build and QA validate the translation project first. Unknown segment IDs, entries in the wrong page file, duplicate JSON keys, non-text translations and invalid merges return a nonzero exit with a file or segment identifier. These build errors occur before font setup or PDF writing, preserving any existing output. Partial translation remains supported: omitted blocks retain their source text, while merged fragments must explicitly have empty translations (`""`).
+
+Keep the entire `scripts/` directory when using the entry points separately: they share `translation_io.py`. If build uses a custom `--fonts` directory, pass the same directory to QA.
+
+```bash
+python -m unittest discover -s tests -p test_inputs.py -v
+python tests/smoke_test.py
+```
 
 ## The six phases
 

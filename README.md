@@ -2,6 +2,8 @@
 
 **[中文](README.md) | [English](README.en.md)**
 
+[项目总导航](https://github.com/Serennity007/repo-catalog/blob/main/README.zh-CN.md) · [维护记录](CHANGELOG.md)
+
 ![GitHub stars](https://img.shields.io/github/stars/Serennity007/paper-zh-translation?style=flat-square) ![License](https://img.shields.io/github/license/Serennity007/paper-zh-translation?style=flat-square) ![译法](https://img.shields.io/badge/译法-原位替换-blue?style=flat-square) ![语言](https://img.shields.io/badge/语言-中文%20%7C%20EN-orange?style=flat-square)
 
 学术论文 PDF 中文翻译 AI Skill：把英文论文**原位**换成中文——段落按行级坐标抽出，逐页译成 JSON，再由排版引擎写回原来的文本框。分栏、图、表、公式、参考文献的位置一个都不动，读者拿到的仍然是原版纸面。附六阶段流程、三个可独立运行的脚本、术语规范与 13 条排版坑清单。
@@ -38,13 +40,15 @@ paper-zh-translation/
 ├── scripts/
 │   ├── extract_blocks.py       # Phase 1 结构解析（行级块 + 项目符号切分）
 │   ├── build_pdf.py            # Phase 3 排版引擎（擦除 + 原位写中文 + 字体子集化）
-│   └── qa_check.py             # Phase 4 质检（残留英文 / 越界 / 缺字形 / 丢字）
+│   ├── qa_check.py             # Phase 4 质检（残留英文 / 越界 / 缺字形 / 丢字）
+│   └── translation_io.py       # 构建与质检共享的译文输入校验
 ├── references/
 │   ├── translation-json.md     # 译文 JSON 格式、merge / color / align / skip_first 元数据
 │   ├── terminology.md          # 数据缩减 / 模型训练 / 数据库三组术语对照 + 图注写法
 │   └── pitfalls.md             # 13 个高频坑：症状 → 原因 → 处理
 └── tests/
-    └── smoke_test.py           # 合成一篇双栏 PDF，端到端跑 Phase 1 → 3 → 4
+    ├── smoke_test.py           # 合成一篇双栏 PDF，端到端跑 Phase 1 → 3 → 4
+    └── test_inputs.py          # 错误段落 ID、重复键、页码、merge 与输出保护回归
 ```
 
 ## 环境
@@ -63,7 +67,7 @@ WORK=翻译工程                       # 中间产物都放这里，改一句�
 python scripts/extract_blocks.py paper.pdf "$WORK"
 # 读 "$WORK"/seg00.txt，逐页把译文写成 "$WORK"/zh_page00.json（格式见 references/translation-json.md）
 python scripts/build_pdf.py --src paper.pdf --work "$WORK"
-python scripts/qa_check.py paper_中文翻译.pdf --work "$WORK"
+python scripts/qa_check.py paper_中文翻译.pdf --work "$WORK" --src paper.pdf
 ```
 
 常用参数：
@@ -75,6 +79,15 @@ python scripts/qa_check.py paper_中文翻译.pdf --work "$WORK"
 | `--fonts` | 实例化字体的存放目录 |
 | `--no-justify` | 关掉逐字两端对齐（西文占比高的段落更自然） |
 | `--tol` | `qa_check.py` 的横向越界容差，默认 5pt |
+
+构建和质检会先核对 `segments.json` 与译文：不存在的段落 ID、放错页的条目、重复 JSON 键、非文本译文及无效 `merge` 均返回非零退出码，错误会标出文件名或段落 ID。构建失败发生在字体准备和写 PDF 之前；已有输出不会被这些输入错误覆盖。只翻译一部分段落仍然支持，未列入 JSON 的块保留原文；`merge` 的碎片目标必须显式写成 `""`。
+
+三个入口脚本依赖同目录的 `translation_io.py`，单独使用时请保留整个 `scripts/` 目录。若构建时传了自定义 `--fonts`，质检也需传同一个目录。
+
+```bash
+python -m unittest discover -s tests -p test_inputs.py -v
+python tests/smoke_test.py
+```
 
 ## 六个阶段
 

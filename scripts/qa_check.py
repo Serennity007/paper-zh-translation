@@ -13,13 +13,12 @@
 退出码非 0 表示有需要修的问题。
 """
 import argparse
-import glob
-import json
 import os
 import re
 import sys
 
 import pymupdf
+from translation_io import load_segments, load_zh, validate_page_count
 
 CJK = re.compile(r'[\u4e00-\u9fff]')
 LAT = re.compile(r'[A-Za-z]')
@@ -78,13 +77,20 @@ def main():
                     help='横向越界容差（pt）；悬挂标点与字形advance误差通常<=4pt')
     args = ap.parse_args()
 
+    try:
+        segments = load_segments(args.work)
+        zh, meta = load_zh(args.work, segments)
+        doc = pymupdf.open(args.pdf)
+        validate_page_count(segments, doc.page_count)
+    except (OSError, ValueError) as error:
+        ap.error(str(error))
+
     src = args.src
     if not src:
         cand = args.pdf.replace('_中文翻译', '')
         src = cand if os.path.exists(cand) else None
     l_right, r_right = column_edges(src) if src else (296, 559)
 
-    doc = pymupdf.open(args.pdf)
     problems = {'english': [], 'over_x': [], 'over_y': [], 'glyph': [], 'dropped': []}
 
     # 1) 残留英文
@@ -95,14 +101,14 @@ def main():
             t = ' '.join(''.join(s['text'] for s in l['spans']) for l in b['lines']).strip()
             if not t or any(h in t for h in KEEP_HINTS):
                 continue
-            zh, en = len(CJK.findall(t)), len(LAT.findall(t))
+            zh_chars, en_chars = len(CJK.findall(t)), len(LAT.findall(t))
             digits = sum(c.isdigit() for c in t)
             # 表格行（数字多）、参考文献条目（[12] 年份）按约定保留英文，不算漏译
             if digits / max(len(t), 1) > 0.12 or re.search(r'\[\d+\]', t):
                 continue
             if re.search(r'\b(19|20)\d{2}\b\s*\.', t):   # 参考文献条目（含年份）
                 continue
-            if en > 60 and zh < 20:
+            if en_chars > 60 and zh_chars < 20:
                 problems['english'].append((pno, t[:70]))
 
     # 2/3) 越界
@@ -139,26 +145,16 @@ def main():
         font = pymupdf.Font(fontfile='C:/Windows/Fonts/simsun.ttc')
     if font:
         bad = set()
-        for f in glob.glob(os.path.join(args.work, 'zh_page*.json')):
-            for k, v in json.load(open(f, encoding='utf-8')).items():
-                if k.startswith('@'):
-                    continue
-                for ch in sanitize(v):
-                    if ch not in '\n\r\t' and not font.has_glyph(ord(ch)):
-                        bad.add(ch)
+        for text in zh.values():
+            for ch in sanitize(text):
+                if ch not in '\n\r\t' and not font.has_glyph(ord(ch)):
+                    bad.add(ch)
         problems['glyph'] = sorted(bad)
 
     # 5) 丢字：按段落框从输出 PDF 里回抽文本，与译文比汉字数
     segfile = os.path.join(args.work, 'segments.json')
     if os.path.exists(segfile):
-        segs = {s['id']: s for s in json.load(open(segfile, encoding='utf-8'))}
-        zh, meta = {}, {}
-        for f in glob.glob(os.path.join(args.work, 'zh_page*.json')):
-            for k, v in json.load(open(f, encoding='utf-8')).items():
-                if k.startswith('@'):
-                    meta[k[1:]] = v
-                else:
-                    zh[k] = v
+        segs = {s['id']: s for s in segments}
         for sid, text in zh.items():
             if not text.strip() or sid not in segs:
                 continue
